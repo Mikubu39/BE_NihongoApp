@@ -6,13 +6,14 @@ RUN mvn dependency:go-offline -B
 COPY src ./src
 RUN mvn clean package -DskipTests
 
-# Stage 2: Lightweight runtime image optimized for Render Free Tier (512MB RAM)
+# Stage 2: Lightweight runtime image for Hugging Face Spaces / Cloud
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
-RUN mkdir -p /app/uploads
-EXPOSE 8080
+RUN mkdir -p /app/uploads && chmod -R 777 /app
+EXPOSE 7860
 
-# Restrict heap memory to 350MB so total container memory stays comfortably under Render 512MB limit
-ENV JAVA_OPTS="-Xmx350m -Xms128m -XX:+UseSerialGC"
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+# Default port for Hugging Face Spaces is 7860
+ENV PORT=7860
+ENV JAVA_OPTS="-Xmx1024m -Xms256m"
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar --server.port=$PORT"]
