@@ -56,10 +56,10 @@ public class ChestService {
         LocalDate today = LocalDate.now();
 
         if (Objects.equals(user.getLastChestOpenedDate(), today)) {
-            throw new ChestNotAvailableException("Ban da mo ruong hom nay roi, quay lai vao ngay mai.");
+            throw new ChestNotAvailableException("Bạn đã mở rương hôm nay rồi, quay lại vào ngày mai.");
         }
         if (!dailyQuestService.areAllTodayQuestsCompleted(userId)) {
-            throw new ChestNotAvailableException("Ban can hoan thanh du 3 nhiem vu hang ngay truoc khi mo ruong.");
+            throw new ChestNotAvailableException("Bạn cần hoàn thành đủ 3 nhiệm vụ hàng ngày trước khi mở rương.");
         }
 
         int reward = ThreadLocalRandom.current().nextInt(MIN_REWARD_COINS, MAX_REWARD_COINS + 1);
@@ -83,6 +83,6 @@ public class ChestService {
 
     private User getUser(Long userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay user voi id=" + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với id=" + userId));
     }
 }

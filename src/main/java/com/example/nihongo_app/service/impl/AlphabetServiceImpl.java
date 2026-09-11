@@ -220,7 +220,7 @@ public class AlphabetServiceImpl implements AlphabetService {
         return AlphabetPracticeResponse.Question.builder()
                 .characterId(character.getId())
                 .questionType(multipleChoice ? "MULTIPLE_CHOICE" : "DRAWING")
-            .prompt(multipleChoice ? "Nghe va chon chu cai dung" : "Viet chu: " + character.getRomaji())
+            .prompt(multipleChoice ? "Nghe và chọn chữ cái đúng" : "Viết chữ: " + character.getRomaji())
                 .symbol(character.getSymbol())
                 .romaji(character.getRomaji())
                 .audioUrl(character.getAudioUrl())

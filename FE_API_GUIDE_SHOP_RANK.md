@@ -129,11 +129,12 @@ Query param `rankId` (**optional**) — không truyền thì mặc định lấy
 {
   "currentRankInfo": { "rankId": 2, "name": "SILVER", "minExpRequired": 1000, "orderIndex": 2 },
   "topUsers": [
-    { "userId": 5, "displayName": "An", "username": "an123", "level": 8, "exp": 2400, "rankId": 2, "rankName": "SILVER", "position": null },
-    { "userId": 9, "displayName": "Binh", "username": "binh99", "level": 6, "exp": 1800, "rankId": 2, "rankName": "SILVER", "position": null }
+    { "userId": 5, "displayName": "An", "username": "an123", "level": 8, "avatarUrl": "https://api.dicebear.com/...", "exp": 2400, "rankId": 2, "rankName": "SILVER", "position": null },
+    { "userId": 9, "displayName": "Binh", "username": "binh99", "level": 6, "avatarUrl": "https://api.dicebear.com/...", "exp": 1800, "rankId": 2, "rankName": "SILVER", "position": null }
   ],
   "currentUserStanding": {
     "userId": 23,
+    "avatarUrl": "https://api.dicebear.com/...",
     "exp": 1500,
     "position": 5,
     "message": null

@@ -17,7 +17,7 @@ public class JsonNodeConverter implements AttributeConverter<JsonNode, String> {
         try {
             return MAPPER.writeValueAsString(attribute);
         } catch (JacksonException e) {
-            throw new IllegalArgumentException("Khong the serialize JSON field", e);
+            throw new IllegalArgumentException("Không thể serialize JSON field", e);
         }
     }
 
@@ -29,7 +29,7 @@ public class JsonNodeConverter implements AttributeConverter<JsonNode, String> {
         try {
             return MAPPER.readTree(dbData);
         } catch (JacksonException e) {
-            throw new IllegalArgumentException("Khong the deserialize JSON field: " + dbData, e);
+            throw new IllegalArgumentException("Không thể deserialize JSON field: " + dbData, e);
         }
     }
 }

@@ -179,7 +179,7 @@ class MistakeServiceImplTest {
     // ============================ submitReviewSession: luat "xoa no" ============================
 
     @Test
-    void submitReviewSession_firstCorrectAnswer_streakBecomes1_notResolvedYet() {
+    void submitReviewSession_firstCorrectAnswer_resolvesMistakeImmediatelyWithDefaultConfig() {
         Mistake mistake = Mistake.builder()
                 .id(1L).userId(USER_ID).questionId(QUESTION_ID)
                 .wrongCount(1).correctStreak(0).status(Mistake.Status.ACTIVE)
@@ -197,13 +197,43 @@ class MistakeServiceImplTest {
         ReviewSubmitResponse response = service.submitReviewSession(USER_ID, req);
 
         assertThat(mistake.getCorrectStreak()).isEqualTo(1);
-        assertThat(mistake.getStatus()).isEqualTo(Mistake.Status.ACTIVE); // chua du 2 lan
-        assertThat(response.getResolvedCount()).isZero();
+        assertThat(mistake.getStatus()).isEqualTo(Mistake.Status.RESOLVED);
+        assertThat(response.getResolvedCount()).isEqualTo(1);
+        assertThat(response.getResults().get(0).getResolved()).isTrue();
     }
 
     @Test
-    void submitReviewSession_secondCorrectSameSession_notResolved_gapTooSmall() {
-        // Lan dung truoc chi moi 1 tieng truoc (< 1 ngay theo resolve-min-gap-days mac dinh).
+    void submitReviewSession_correctAnswerViaIsCorrectWithoutOptionId_resolvesMistake() {
+        // Danh cho cau hoi sap xep hoac cau noi khong co 1 optionId cu the
+        Mistake mistake = Mistake.builder()
+                .id(1L).userId(USER_ID).questionId(QUESTION_ID)
+                .wrongCount(1).correctStreak(0).status(Mistake.Status.ACTIVE)
+                .lastCorrectAt(null)
+                .build();
+        when(userRepository.findById(USER_ID)).thenReturn(Optional.of(user));
+        when(mistakeRepository.findByUserIdAndQuestionId(USER_ID, QUESTION_ID)).thenReturn(Optional.of(mistake));
+
+        AnswerItem item = new AnswerItem();
+        item.setQuestionId(QUESTION_ID);
+        item.setSelectedOptionId(null);
+        item.setIsCorrect(true);
+
+        ReviewSubmitRequest req = new ReviewSubmitRequest();
+        req.setAnswers(List.of(item));
+
+        ReviewSubmitResponse response = service.submitReviewSession(USER_ID, req);
+
+        assertThat(mistake.getCorrectStreak()).isEqualTo(1);
+        assertThat(mistake.getStatus()).isEqualTo(Mistake.Status.RESOLVED);
+        assertThat(response.getResolvedCount()).isEqualTo(1);
+        assertThat(response.getResults().get(0).getCorrect()).isTrue();
+    }
+
+    @Test
+    void submitReviewSession_secondCorrectSameSession_withCustomGapConfig_notResolved() {
+        properties.setResolveStreak(2);
+        properties.setResolveMinGapDays(1);
+
         Mistake mistake = Mistake.builder()
                 .id(1L).userId(USER_ID).questionId(QUESTION_ID)
                 .wrongCount(1).correctStreak(1).status(Mistake.Status.ACTIVE)
@@ -221,12 +251,15 @@ class MistakeServiceImplTest {
         ReviewSubmitResponse response = service.submitReviewSession(USER_ID, req);
 
         assertThat(mistake.getCorrectStreak()).isEqualTo(2); // streak van tang
-        assertThat(mistake.getStatus()).isEqualTo(Mistake.Status.ACTIVE); // nhung chua "xoa no"
+        assertThat(mistake.getStatus()).isEqualTo(Mistake.Status.ACTIVE); // nhung chua "xoa no" do chua du 1 ngay
         assertThat(response.getResolvedCount()).isZero();
     }
 
     @Test
-    void submitReviewSession_secondCorrectAfterOneDay_resolvesMistake() {
+    void submitReviewSession_secondCorrectAfterOneDay_withCustomGapConfig_resolvesMistake() {
+        properties.setResolveStreak(2);
+        properties.setResolveMinGapDays(1);
+
         LocalDateTime yesterday = LocalDateTime.of(2026, 8, 1, 10, 0);
         LocalDateTime today = LocalDateTime.of(2026, 8, 2, 10, 0);
 

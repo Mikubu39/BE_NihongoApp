@@ -157,6 +157,14 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                 .body(buildBody(HttpStatus.BAD_REQUEST, ex.getMessage(), null));
     }
 
+    @ExceptionHandler(com.example.nihongo_app.exception.PlacementNotEligibleException.class)
+    public ResponseEntity<Object> handlePlacementNotEligible(
+            com.example.nihongo_app.exception.PlacementNotEligibleException ex) {
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(buildBody(HttpStatus.CONFLICT, ex.getMessage(), null));
+    }
+
     @ExceptionHandler(com.example.nihongo_app.exception.ChestNotAvailableException.class)
     public ResponseEntity<Object> handleChestNotAvailable(
             com.example.nihongo_app.exception.ChestNotAvailableException ex) {

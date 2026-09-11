@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.lenient;
@@ -240,6 +241,113 @@ class LessonAttemptServiceImplTest {
         assertThat(response.getCoinsEarned()).isZero();
         verify(coinTransactionRepository, never()).save(any());
         verify(dailyQuestService, never()).recordProgress(any(), any(), anyInt());
+    }
+
+    /**
+     * Truoc fix: passed = heartsRemaining client tu gui > 0, khong doi chieu voi ket qua
+     * cham that tu {@code answers}. Mot client sua tay request gui heartsRemaining=5 (con day)
+     * du sai het cau se van duoc cho dau. Sau fix: khi co {@code answers}, passed phai dua vao
+     * gradedMistakes tinh tu DB, bo qua heartsRemaining client khai.
+     */
+    @Test
+    void submitJumpTest_gradedMistakesExceedThreshold_failsEvenIfClientLiesAboutHearts() {
+        when(lessonRepository.findById(LESSON_ID)).thenReturn(Optional.of(lessonOfType(LessonType.JUMP_TEST)));
+
+        List<com.example.nihongo_app.dto.request.AnswerItem> answers = new java.util.ArrayList<>();
+        for (long i = 1; i <= 5; i++) {
+            long optionId = 300 + i;
+            when(questionRepository.findById(i)).thenReturn(Optional.of(
+                    LessonQuestion.builder().id(i).lessonId(LESSON_ID).build()));
+            when(optionRepository.findById(optionId)).thenReturn(Optional.of(option(optionId, i, false)));
+            answers.add(answerItem(i, optionId));
+        }
+
+        SubmitLessonRequest req = request(5, 0, 5);
+        req.setHeartsRemaining(5); // client "noi doi" -- BE khong duoc tin so nay khi da co answers
+        req.setAnswers(answers);
+
+        SubmitLessonResponse response = service.submitLesson(LESSON_ID, USER_ID, req);
+
+        assertThat(response.getStatus()).isEqualTo("IN_PROGRESS"); // khong dau
+        assertThat(response.getCoinsEarned()).isZero();
+        assertThat(response.getExpEarned()).isZero();
+    }
+
+    @Test
+    void submitJumpTest_incompleteQuestions_failsEvenIfHeartsRemaining() {
+        when(lessonRepository.findById(LESSON_ID)).thenReturn(Optional.of(lessonOfType(LessonType.JUMP_TEST)));
+        // Bai co 10 cau nhung user moi lam 3 cau (2 dung, 1 sai) roi dung giua chung
+        SubmitLessonRequest req = request(10, 2, 1);
+        req.setHeartsRemaining(2);
+
+        SubmitLessonResponse response = service.submitLesson(LESSON_ID, USER_ID, req);
+
+        assertThat(response.getStatus()).isEqualTo("IN_PROGRESS");
+        assertThat(response.getCoinsEarned()).isZero();
+        assertThat(response.getExpEarned()).isZero();
+        assertThat(response.getIsTopicCompleted()).isFalse();
+    }
+
+    @Test
+    void submitJumpTest_completeQuestionsWithinMistakeLimit_passes() {
+        when(lessonRepository.findById(LESSON_ID)).thenReturn(Optional.of(lessonOfType(LessonType.JUMP_TEST)));
+        // Lam du 10 cau voi 2 loi sai (con 1 tim) -> dau
+        SubmitLessonRequest req = request(10, 8, 2);
+        req.setHeartsRemaining(1);
+
+        SubmitLessonResponse response = service.submitLesson(LESSON_ID, USER_ID, req);
+
+        assertThat(response.getStatus()).isEqualTo("COMPLETED");
+        assertThat(response.getCoinsEarned()).isEqualTo(20);
+        assertThat(response.getExpEarned()).isGreaterThan(0);
+        assertThat(response.getIsTopicCompleted()).isTrue();
+    }
+
+    /**
+     * Truoc fix: JUMP_TEST dau chi danh dau siblings cua DUNG topic vua thi (topic 3) --
+     * neu user chua tung dung toi topic 1, 2 thi 2 topic do van LOCKED trong khi topic 3
+     * COMPLETED ("nhay lo cho"). Sau fix: phai danh dau CA topic 1, 2 (moi topic co
+     * order_index <= topic 3) cung COMPLETED trong cung 1 lan submit.
+     */
+    @Test
+    void submitJumpTest_pass_completesEveryEarlierTopicToo_noGaps() {
+        Long earlierTopic1 = 201L;
+        Long earlierTopic2 = 202L;
+        Lesson jumpTestLesson = Lesson.builder().id(LESSON_ID).topicId(TOPIC_ID).title("Thi vuot")
+                .lessonType(LessonType.JUMP_TEST).build();
+        when(lessonRepository.findById(LESSON_ID)).thenReturn(Optional.of(jumpTestLesson));
+
+        when(topicRepository.findAllActiveWithLessons()).thenReturn(List.of(
+                Topic.builder().id(earlierTopic1).orderIndex(1).build(),
+                Topic.builder().id(earlierTopic2).orderIndex(2).build(),
+                Topic.builder().id(TOPIC_ID).orderIndex(3).build()));
+
+        Lesson earlierNormal1 = Lesson.builder().id(301L).topicId(earlierTopic1).lessonType(LessonType.NORMAL).build();
+        Lesson earlierNormal2 = Lesson.builder().id(302L).topicId(earlierTopic2).lessonType(LessonType.NORMAL).build();
+        when(lessonRepository.findAllByTopicIdOrdered(earlierTopic1)).thenReturn(List.of(earlierNormal1));
+        when(lessonRepository.findAllByTopicIdOrdered(earlierTopic2)).thenReturn(List.of(earlierNormal2));
+        when(lessonRepository.findAllByTopicIdOrdered(TOPIC_ID)).thenReturn(List.of(jumpTestLesson));
+
+        // Cac bai NORMAL bi nhay coc qua co cau hoi rieng -- day la nguon de
+        // backfillSkippedProgress tim tu vung chua tung duoc test.
+        when(questionRepository.findAllByLessonIdInOrderByIdAsc(List.of(301L, 302L))).thenReturn(List.of(
+                LessonQuestion.builder().id(9001L).lessonId(301L).questionType(QuestionType.TRANSLATE_TO_JP).build(),
+                LessonQuestion.builder().id(9002L).lessonId(302L).questionType(QuestionType.TRANSLATE_TO_JP).build()));
+
+        SubmitLessonRequest req = request(10, 10, 0);
+        req.setHeartsRemaining(5);
+
+        service.submitLesson(LESSON_ID, USER_ID, req);
+
+        verify(progressRepository).save(argThat(p ->
+                p.getLessonId().equals(301L) && p.getStatus() == ProgressStatus.COMPLETED));
+        verify(progressRepository).save(argThat(p ->
+                p.getLessonId().equals(302L) && p.getStatus() == ProgressStatus.COMPLETED));
+
+        // Nhay coc qua JUMP_TEST khong tra loi tung cau cua 2 bai NORMAL bi
+        // danh dau COMPLETED an theo -- SM-2 phai duoc bao de backfill tu
+        // vung cua chung, khong thi tu vung do bien mat khoi lich on mai mai.
+        verify(vocabularyService).backfillSkippedProgress(USER_ID, List.of(9001L, 9002L));
     }
 
     @Test

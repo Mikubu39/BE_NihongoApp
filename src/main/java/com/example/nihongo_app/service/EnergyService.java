@@ -76,7 +76,7 @@ public class EnergyService {
         int maxEnergy = Objects.requireNonNullElse(user.getMaxEnergy(), MAX_ENERGY);
         int currentEnergy = Objects.requireNonNullElse(user.getCurrentEnergy(), 0);
         if (currentEnergy >= maxEnergy) {
-            throw new IllegalStateException("Nang luong da day, khong can xem quang cao");
+            throw new IllegalStateException("Năng lượng đã đầy, không cần xem quảng cáo");
         }
 
         LocalDateTime now = LocalDateTime.now();
@@ -85,8 +85,8 @@ public class EnergyService {
             long elapsedSeconds = Duration.between(lastAdWatch, now).getSeconds();
             if (elapsedSeconds < AD_COOLDOWN_SECONDS) {
                 throw new IllegalStateException(
-                        "Vui long cho " + ((AD_COOLDOWN_SECONDS - elapsedSeconds) / 60)
-                                + " phut de xem quang cao lan nua");
+                        "Vui lòng chờ " + ((AD_COOLDOWN_SECONDS - elapsedSeconds) / 60)
+                                + " phút để xem quảng cáo lần nữa");
             }
         }
 
@@ -107,7 +107,7 @@ public class EnergyService {
         int currentEnergy = Objects.requireNonNullElse(user.getCurrentEnergy(), 0);
         if (currentEnergy < amount) {
             throw new InsufficientEnergyException(
-                    "Khong du nang luong. Can " + amount + ", hien co " + currentEnergy);
+                    "Không đủ năng lượng. Cần " + amount + ", hiện có " + currentEnergy);
         }
 
         user.setCurrentEnergy(currentEnergy - amount);
@@ -126,13 +126,13 @@ public class EnergyService {
         int currentEnergy = Objects.requireNonNullElse(user.getCurrentEnergy(), 0);
 
         if (currentEnergy >= maxEnergy) {
-            throw new IllegalStateException("Nang luong da day, khong can nap");
+            throw new IllegalStateException("Năng lượng đã đầy, không cần nạp");
         }
 
         int coins = Objects.requireNonNullElse(user.getCoins(), 0);
         if (coins < REFILL_COST_COINS) {
             throw new InsufficientCoinsException(
-                    "Khong du coins. Can " + REFILL_COST_COINS + ", hien co " + coins);
+                    "Không đủ xu. Cần " + REFILL_COST_COINS + ", hiện có " + coins);
         }
 
         user.setCoins(coins - REFILL_COST_COINS);

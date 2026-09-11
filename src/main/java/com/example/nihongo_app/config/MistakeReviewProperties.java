@@ -18,11 +18,11 @@ public class MistakeReviewProperties {
     /** So mistake ACTIVE toi da duoc dua vao 1 phien on (mac dinh 10). */
     private int sessionSize = 10;
 
-    /** So lan dung lien tiep can de "xoa no" mot mistake (mac dinh 2). */
-    private int resolveStreak = 2;
+    /** So lan dung lien tiep can de "xoa no" mot mistake (mac dinh 1). */
+    private int resolveStreak = 1;
 
-    /** So ngay toi thieu giua 2 lan dung gan nhat de lan dung moi nhat duoc tinh vao streak xoa no (mac dinh 1). */
-    private int resolveMinGapDays = 1;
+    /** So ngay toi thieu giua 2 lan dung gan nhat de lan dung moi nhat duoc tinh vao streak xoa no (mac dinh 0). */
+    private int resolveMinGapDays = 0;
 
     /** Nang luong thuong khi hoan thanh 1 phien on hop le (mac dinh 5). */
     private int energyReward = 5;

@@ -1,4 +1,4 @@
-package com.example.nihongo_app.service.impl;
+﻿package com.example.nihongo_app.service.impl;
 
 import com.example.nihongo_app.config.MistakeReviewProperties;
 import com.example.nihongo_app.dto.request.AnswerItem;
@@ -94,7 +94,7 @@ public class MistakeServiceImpl implements MistakeService {
         if (topMistakes.isEmpty()) {
             return ReviewSessionResponse.builder()
                     .questions(List.of())
-                    .message("Ban chua co loi sai nao can on tap, tiep tuc hoc bai moi nhe!")
+                    .message("Báº¡n chÆ°a cÃ³ lá»—i sai nÃ o cáº§n Ã´n táº­p, tiáº¿p tá»¥c há»c bÃ i má»›i nhÃ©!")
                     .build();
         }
 
@@ -152,7 +152,7 @@ public class MistakeServiceImpl implements MistakeService {
     private ReviewQuestion toReviewQuestion(Long questionId) {
         LessonQuestion question = questionRepository.findById(questionId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Khong tim thay cau hoi voi id=" + questionId));
+                        "KhÃ´ng tÃ¬m tháº¥y cÃ¢u há»i vá»›i id=" + questionId));
 
         List<LessonQuestionOption> options = optionRepository
                 .findAllByQuestionIdOrderByOrderIndexAscIdAsc(question.getId());
@@ -164,6 +164,7 @@ public class MistakeServiceImpl implements MistakeService {
                         .imageUrl(o.getImageUrl())
                         .audioUrl(o.getAudioUrl())
                         .metadataJson(o.getMetadataJson())
+                        .isCorrect(Boolean.TRUE.equals(o.getCorrect()))
                         .order(o.getOrderIndex())
                         .build())
                 .toList();
@@ -180,23 +181,35 @@ public class MistakeServiceImpl implements MistakeService {
     }
 
     /**
-     * Cham 1 cau tra loi trong phien on: doi chieu selectedOptionId voi DB de tu xac dinh
-     * dung/sai (khong tin FE), roi cap nhat Mistake tuong ung. Tra ve {@code null} (bo qua,
-     * co log warning) neu answer thieu du lieu, option khong thuoc question, hoac user
-     * khong co mistake nao ung voi questionId nay (khong tao moi mistake tu phien on).
+     * Cham 1 cau tra loi trong phien on:
+     * - Neu co selectedOptionId: doi chieu voi DB de tu xac dinh dung/sai.
+     * - Neu khong co selectedOptionId (cau sap xep, cau noi... khong co 1 option cu the): tiep nhan isCorrect do client gui.
+     * Tra ve {@code null} (bo qua, co log warning) neu answer thieu ca selectedOptionId lan isCorrect,
+     * option khong thuoc question, hoac user khong co mistake nao ung voi questionId nay.
      */
     private ReviewAnswerResult gradeReviewAnswer(Long userId, AnswerItem item) {
-        if (item.getQuestionId() == null || item.getSelectedOptionId() == null) {
-            log.warn("Bo qua review answer thieu questionId/selectedOptionId: user={}", userId);
+        if (item.getQuestionId() == null || (item.getSelectedOptionId() == null && item.getIsCorrect() == null)) {
+            log.warn("Bo qua review answer thieu questionId/dap an: user={}", userId);
             return null;
         }
 
-        LessonQuestionOption selectedOption = optionRepository.findById(item.getSelectedOptionId()).orElse(null);
-        if (selectedOption == null || !Objects.equals(selectedOption.getQuestionId(), item.getQuestionId())) {
-            log.warn("Bo qua review answer khong hop le (option khong thuoc question): user={} "
-                            + "questionId={} selectedOptionId={}",
-                    userId, item.getQuestionId(), item.getSelectedOptionId());
-            return null;
+        boolean correct;
+        Long correctOptionId = null;
+
+        if (item.getSelectedOptionId() != null) {
+            LessonQuestionOption selectedOption = optionRepository.findById(item.getSelectedOptionId()).orElse(null);
+            if (selectedOption == null || !Objects.equals(selectedOption.getQuestionId(), item.getQuestionId())) {
+                log.warn("Bo qua review answer khong hop le (option khong thuoc question): user={} "
+                                + "questionId={} selectedOptionId={}",
+                        userId, item.getQuestionId(), item.getSelectedOptionId());
+                return null;
+            }
+            correct = Boolean.TRUE.equals(selectedOption.getCorrect());
+            correctOptionId = optionRepository.findFirstByQuestionIdAndCorrectTrue(item.getQuestionId())
+                    .map(LessonQuestionOption::getId)
+                    .orElse(null);
+        } else {
+            correct = Boolean.TRUE.equals(item.getIsCorrect());
         }
 
         Mistake mistake = mistakeRepository.findByUserIdAndQuestionId(userId, item.getQuestionId()).orElse(null);
@@ -206,7 +219,6 @@ public class MistakeServiceImpl implements MistakeService {
             return null;
         }
 
-        boolean correct = Boolean.TRUE.equals(selectedOption.getCorrect());
         boolean resolved;
         if (correct) {
             resolved = applyCorrectAnswer(mistake);
@@ -214,10 +226,6 @@ public class MistakeServiceImpl implements MistakeService {
             applyWrongAnswer(mistake);
             resolved = false;
         }
-
-        Long correctOptionId = optionRepository.findFirstByQuestionIdAndCorrectTrue(item.getQuestionId())
-                .map(LessonQuestionOption::getId)
-                .orElse(null);
 
         return ReviewAnswerResult.builder()
                 .questionId(item.getQuestionId())
@@ -241,9 +249,8 @@ public class MistakeServiceImpl implements MistakeService {
 
     /**
      * Cau dung trong phien on: correct_streak++, last_correct_at = now. Neu streak dat nguong
-     * VA lan dung truoc do (last_correct_at cu) cach lan nay >= resolve-min-gap-days ngay
-     * -> chuyen RESOLVED ("xoa no"). Dieu kien nay chan hoc vet: 2 lan dung lien tiep trong
-     * cung 1 phien/ngay khong du de xoa no, phai cach nhau it nhat 1 ngay.
+     * VA khoang cach giua 2 lan dung thoa man resolve-min-gap-days -> chuyen RESOLVED ("xoa no").
+     * Khi resolve-min-gap-days <= 0, dung du resolve-streak lan la xoa no ngay khong can cach ngay.
      *
      * @return true neu mistake vua chuyen sang RESOLVED do lan tra loi nay.
      */
@@ -255,10 +262,13 @@ public class MistakeServiceImpl implements MistakeService {
         mistake.setCorrectStreak(newStreak);
         mistake.setLastCorrectAt(now);
 
+        boolean gapSatisfied = properties.getResolveMinGapDays() <= 0
+                || (previousCorrectAt != null && Duration.between(previousCorrectAt, now).toDays() >= properties.getResolveMinGapDays());
+
         boolean justResolved = mistake.getStatus() == Mistake.Status.ACTIVE
                 && newStreak >= properties.getResolveStreak()
-                && previousCorrectAt != null
-                && Duration.between(previousCorrectAt, now).toDays() >= properties.getResolveMinGapDays();
+                && gapSatisfied;
+
         if (justResolved) {
             mistake.setStatus(Mistake.Status.RESOLVED);
         }
@@ -268,7 +278,7 @@ public class MistakeServiceImpl implements MistakeService {
 
     /**
      * Thuong nang luong cho 1 phien on hop le (>=1 cau da cham), toi da
-     * {@code rewarded-sessions-per-day} lan/ngay — dem qua 2 cot tren User, tu reset khi
+     * {@code rewarded-sessions-per-day} lan/ngay â€” dem qua 2 cot tren User, tu reset khi
      * sang ngay moi (khong can job rieng).
      *
      * @return so nang luong da thuong (0 neu da het luot thuong trong ngay).
@@ -297,6 +307,6 @@ public class MistakeServiceImpl implements MistakeService {
 
     private User getUser(Long userId) {
         return userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay user voi id=" + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("KhÃ´ng tÃ¬m tháº¥y ngÆ°á»i dÃ¹ng vá»›i id=" + userId));
     }
 }

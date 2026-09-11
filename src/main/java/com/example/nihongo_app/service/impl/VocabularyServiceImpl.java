@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -170,6 +171,47 @@ public class VocabularyServiceImpl implements VocabularyService {
                 .correctCount(correctCount)
                 .remainingDue(progressRepository.countByUserIdAndNextDueAtLessThanEqual(userId, LocalDateTime.now()))
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public void backfillSkippedProgress(Long userId, List<Long> questionIds) {
+        if (questionIds == null || questionIds.isEmpty()) {
+            return;
+        }
+
+        Set<Long> vocabularyIds = new LinkedHashSet<>();
+        for (Object[] row : vocabularyRepository.findTargetVocabularyByQuestionIds(questionIds)) {
+            vocabularyIds.add(((Number) row[1]).longValue());
+        }
+        if (vocabularyIds.isEmpty()) {
+            return;
+        }
+
+        Set<Long> existing = new HashSet<>();
+        for (UserVocabularyProgress p : progressRepository
+                .findAllByUserIdAndVocabularyIdIn(userId, List.copyOf(vocabularyIds))) {
+            existing.add(p.getVocabularyId());
+        }
+
+        // Progress "mới toanh, đến hạn ngay" -- KHÔNG áp scheduler.apply() vì đó
+        // sẽ giả vờ đây là một lần trả lời đúng thật và đẩy interval đi xa.
+        // Người học chưa hề được hỏi từ này; lần ôn tập gần nhất phải kiểm tra
+        // thật, không phải được coi như đã thuộc.
+        LocalDateTime now = LocalDateTime.now();
+        List<UserVocabularyProgress> toCreate = new ArrayList<>();
+        for (Long vocabularyId : vocabularyIds) {
+            if (existing.contains(vocabularyId)) {
+                continue;
+            }
+            UserVocabularyProgress progress = scheduler.newProgress(userId, vocabularyId);
+            progress.setFirstLearnedAt(now);
+            progress.setNextDueAt(now);
+            toCreate.add(progress);
+        }
+        if (!toCreate.isEmpty()) {
+            progressRepository.saveAll(toCreate);
+        }
     }
 
     @Override

@@ -65,6 +65,7 @@ class RankServiceImplTest {
                 .id(10L)
                 .displayName("Current User")
                 .username("curuser")
+                .avatarUrl("https://example.com/cur.png")
                 .exp(1500)
                 .rank(rankSilver)
                 .build();
@@ -73,6 +74,7 @@ class RankServiceImplTest {
                 .id(1L)
                 .displayName("Top 1")
                 .username("top1")
+                .avatarUrl("https://example.com/top1.png")
                 .exp(2500)
                 .rank(rankSilver)
                 .build();
@@ -88,7 +90,10 @@ class RankServiceImplTest {
         assertThat(response.getCurrentRankInfo().getRankId()).isEqualTo(2L);
         assertThat(response.getCurrentRankInfo().getName()).isEqualTo("SILVER");
         assertThat(response.getTopUsers()).hasSize(2);
+        assertThat(response.getTopUsers().get(0).getAvatarUrl()).isEqualTo("https://example.com/top1.png");
+        assertThat(response.getTopUsers().get(1).getAvatarUrl()).isEqualTo("https://example.com/cur.png");
         assertThat(response.getCurrentUserStanding().getUserId()).isEqualTo(10L);
+        assertThat(response.getCurrentUserStanding().getAvatarUrl()).isEqualTo("https://example.com/cur.png");
         assertThat(response.getCurrentUserStanding().getPosition()).isEqualTo(4); // 3 + 1
         assertThat(response.getCurrentUserStanding().getMessage()).isNull();
     }

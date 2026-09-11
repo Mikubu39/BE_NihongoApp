@@ -167,7 +167,7 @@ public class StreakService {
         int coins = Objects.requireNonNullElse(user.getCoins(), 0);
         if (coins < FREEZE_COST_COINS) {
             throw new InsufficientCoinsException(
-                    "Khong du coins. Can " + FREEZE_COST_COINS + ", hien co " + coins);
+                    "Không đủ xu. Cần " + FREEZE_COST_COINS + ", hiện có " + coins);
         }
 
         int freezeCount = Objects.requireNonNullElse(user.getStreakFreezeCount(), 0);

@@ -59,8 +59,8 @@ app:
     enabled: ${MAIL_ENABLED:false}
   mistake-review:
     session-size: 10
-    resolve-streak: 2
-    resolve-min-gap-days: 1
+    resolve-streak: 1
+    resolve-min-gap-days: 0
     energy-reward: 5
     rewarded-sessions-per-day: 2
 

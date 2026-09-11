@@ -182,7 +182,7 @@ public class PostServiceImpl implements PostService {
         User currentUser = userRepository.findById(currentUserId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
         if (!"ADMIN".equals(currentUser.getRole())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Ban khong co quyen thao tac tren tai nguyen nay");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Bạn không có quyền thao tác trên tài nguyên này");
         }
     }
 }

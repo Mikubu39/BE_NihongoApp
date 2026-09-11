@@ -35,6 +35,22 @@ public interface VocabularyService {
     VocabularyReviewResponse submitReview(Long userId, VocabularyReviewRequest request);
 
     /**
+     * Backfill lịch ôn cho từ vựng của những câu hỏi này mà user CHƯA TỪNG có
+     * progress row.
+     *
+     * <p>Dùng khi một lesson bị đánh dấu COMPLETED mà KHÔNG qua chấm bài thật —
+     * JUMP_TEST/bài kiểm tra đầu vào cho nhảy cóc qua nguyên topic, kéo theo các
+     * bài NORMAL/TOPIC_REVIEW trong đó cũng thành COMPLETED dù người học chưa hề
+     * trả lời câu nào của chúng. Không có bước này thì từ vựng trong các bài bị
+     * nhảy qua không bao giờ vào lịch SM-2, dù roadmap coi như "đã học".</p>
+     *
+     * <p>Không giả vờ đã nhớ: progress mới tạo ở đây được đánh dấu tới hạn NGAY
+     * (không đẩy interval như một lần trả lời đúng thật), để lần ôn tập gần nhất
+     * tự kiểm tra xem người học có thực sự biết từ đó không.</p>
+     */
+    void backfillSkippedProgress(Long userId, List<Long> questionIds);
+
+    /**
      * Với mỗi câu hỏi: từ trọng tâm của nó có phải từ người học CHƯA TỪNG GẶP không.
      *
      * <p>Câu không gắn từ nào thì không có mặt trong kết quả — gọi bên gọi tự quyết

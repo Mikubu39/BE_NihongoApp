@@ -130,7 +130,7 @@ class CoinQuestChestIntegrationTest {
         // 6. Mo lai lan 2 trong cung ngay -> bi chan.
         mockMvc.perform(post("/api/v1/users/me/chest/open").header("Authorization", bearerToken))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Ban da mo ruong hom nay roi, quay lai vao ngay mai."));
+                .andExpect(jsonPath("$.message").value("Bạn đã mở rương hôm nay rồi, quay lại vào ngày mai."));
 
         // 7. Mua Streak Freeze: coin hien co (24 tu bai hoc + 30-100 tu ruong) nhieu kha nang
         //    van chua du 200 -> kiem tra tu choi dung cach.

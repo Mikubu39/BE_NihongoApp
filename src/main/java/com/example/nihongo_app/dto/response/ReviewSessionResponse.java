@@ -1,4 +1,4 @@
-package com.example.nihongo_app.dto.response;
+﻿package com.example.nihongo_app.dto.response;
 
 import com.example.nihongo_app.entity.LessonQuestion.QuestionType;
 import java.util.List;
@@ -9,17 +9,17 @@ import tools.jackson.databind.JsonNode;
 /**
  * Response cho {@code POST /api/v1/reviews/mistakes/start}.
  *
- * <p>Khác {@code StartLessonResponse}: không trừ năng lượng, và option KHÔNG kèm cờ đáp án
- * đúng (server tự chấm ở {@code /submit}, không để lộ đáp án lúc làm bài ôn tập).</p>
+ * <p>KhÃ¡c {@code StartLessonResponse}: khÃ´ng trá»« nÄƒng lÆ°á»£ng, vÃ  option KHÃ”NG kÃ¨m cá» Ä‘Ã¡p Ã¡n
+ * Ä‘Ãºng (server tá»± cháº¥m á»Ÿ {@code /submit}, khÃ´ng Ä‘á»ƒ lá»™ Ä‘Ã¡p Ã¡n lÃºc lÃ m bÃ i Ã´n táº­p).</p>
  */
 @Value
 @Builder
 public class ReviewSessionResponse {
 
-    /** Danh sách câu hỏi đã shuffle (rỗng nếu user không có mistake ACTIVE nào). */
+    /** Danh sÃ¡ch cÃ¢u há»i Ä‘Ã£ shuffle (rá»—ng náº¿u user khÃ´ng cÃ³ mistake ACTIVE nÃ o). */
     List<ReviewQuestion> questions;
 
-    /** Thông báo ngắn cho FE hiển thị, đặc biệt khi {@code questions} rỗng. */
+    /** ThÃ´ng bÃ¡o ngáº¯n cho FE hiá»ƒn thá»‹, Ä‘áº·c biá»‡t khi {@code questions} rá»—ng. */
     String message;
 
     @Value
@@ -42,6 +42,7 @@ public class ReviewSessionResponse {
         String imageUrl;
         String audioUrl;
         JsonNode metadataJson;
+        Boolean isCorrect;
         Integer order;
     }
 }

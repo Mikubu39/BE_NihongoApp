@@ -19,6 +19,7 @@ public class LeaderboardResponse {
         String displayName;
         String username;
         Integer level;
+        String avatarUrl;
         Integer exp;
         Long rankId;
         String rankName;
@@ -29,6 +30,7 @@ public class LeaderboardResponse {
     @Builder
     public static class CurrentUserStandingResponse {
         Long userId;
+        String avatarUrl;
         Integer exp;
         Integer position;
         String message;

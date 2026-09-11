@@ -2,6 +2,7 @@ package com.example.nihongo_app.service;
 
 import com.example.nihongo_app.dto.request.SubmitLessonRequest;
 import com.example.nihongo_app.dto.response.CancelLessonResponse;
+import com.example.nihongo_app.dto.response.PlacementCompletionResult;
 import com.example.nihongo_app.dto.response.StartLessonResponse;
 import com.example.nihongo_app.dto.response.SubmitLessonResponse;
 
@@ -45,4 +46,18 @@ public interface LessonAttemptService {
      * Chỉ có tác dụng khi bài đang ở trạng thái IN_PROGRESS.
      */
     CancelLessonResponse cancelLesson(Long lessonId, Long userId);
+
+    /**
+     * Dùng bởi {@code PlacementService} khi bài kiểm tra đầu vào chốt được điểm dừng:
+     * đánh dấu COMPLETED mọi Topic có {@code order_index <= } Topic tại {@code cutoffTopicId}
+     * (bao gồm chính nó), rồi cộng 1 khoản thưởng cố định 1 lần duy nhất cho cả bài test.
+     *
+     * <p>Dùng chung logic cascade với {@code markAllTopicsUpToCompleted} (JUMP_TEST) để đảm bảo
+     * không có "lỗ chỗ" — không có nhánh nào đánh dấu 1 Topic COMPLETED mà bỏ qua Topic trước đó.</p>
+     *
+     * @param cutoffTopicId Topic cuối cùng được xác nhận qua, hoặc {@code null} nếu không Topic
+     *                       nào được xác nhận (user rớt ngay từ vòng đầu) — khi đó không đánh dấu
+     *                       gì cả và không có thưởng.
+     */
+    PlacementCompletionResult completePlacement(Long userId, Long cutoffTopicId);
 }

@@ -112,6 +112,10 @@ public class LessonAttemptServiceImpl implements LessonAttemptService {
     private static final int TIMED_REVIEW_COIN_BASE = 4;
     private static final int TIMED_REVIEW_COIN_PERFECT_BONUS = 2;
     private static final int JUMP_TEST_COIN_REWARD = 20;
+    /** So loi toi da cho phep trong 1 JUMP_TEST khi co 3 tim (sai toi da 2 lan, sai lan 3 la het tim). */
+    private static final int JUMP_TEST_MAX_MISTAKES = 2;
+    private static final int PLACEMENT_EXP_REWARD = 50;
+    private static final int PLACEMENT_COIN_REWARD = 15;
     private static final int STREAK_MILESTONE_7_BONUS = 50;
     private static final int STREAK_MILESTONE_30_BONUS = 200;
     private static final int STREAK_MILESTONE_100_BONUS = 1000;
@@ -128,13 +132,13 @@ public class LessonAttemptServiceImpl implements LessonAttemptService {
     public StartLessonResponse startLesson(Long lessonId, Long userId) {
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Khong tim thay bai hoc voi id=" + lessonId));
+                        "Không tìm thấy bài học với id=" + lessonId));
 
         // 1. Kiem tra unlock qua policy (cung thuat toan voi roadmap).
         Status status = unlockPolicy.evaluate(lesson, userId);
         if (status == Status.LOCKED) {
             throw new LessonLockedException(
-                    "Bai hoc nay chua duoc mo khoa. Hay hoan thanh bai truoc do truoc.");
+                    "Bài học này chưa được mở khóa. Hãy hoàn thành bài trước đó trước.");
         }
 
         // 2. Phan nhanh replay: bai da COMPLETED -> cho phep lam lai, mien phi energy,
@@ -154,14 +158,14 @@ public class LessonAttemptServiceImpl implements LessonAttemptService {
         // 3. Tru nang luong user (chi khi lan dau, replay khong mat energy).
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Khong tim thay user voi id=" + userId));
+                        "Không tìm thấy người dùng với id=" + userId));
         // Dieu kien la "co phai tra tien khong", khong phai "co phai replay khong":
         // luot dang do dang cung mien phi, va tru 0 roi save() la mot lenh UPDATE thua
         // moi lan vao bai.
         if (totalEnergy > 0) {
             if (user.getCurrentEnergy() == null || user.getCurrentEnergy() < totalEnergy) {
                 throw new InsufficientEnergyException(
-                        "Khong du nang luong. Can " + totalEnergy
+                        "Không đủ năng lượng. Cần " + totalEnergy
                                 + " nang luong, hien co " + (user.getCurrentEnergy() == null ? 0 : user.getCurrentEnergy()));
             }
             user.setCurrentEnergy(user.getCurrentEnergy() - totalEnergy);
@@ -246,11 +250,11 @@ public class LessonAttemptServiceImpl implements LessonAttemptService {
     public SubmitLessonResponse submitLesson(Long lessonId, Long userId, SubmitLessonRequest req) {
         Lesson lesson = lessonRepository.findById(lessonId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Khong tim thay bai hoc voi id=" + lessonId));
+                        "Không tìm thấy bài học với id=" + lessonId));
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "Khong tim thay user voi id=" + userId));
+                        "Không tìm thấy người dùng với id=" + userId));
 
         // Xac dinh day co phai replay khong -- suy ra tu DB, KHONG tin co isReplay
         // cua client: replay bi giam EXP/coin, nen client chi can gui false la farm
@@ -321,13 +325,33 @@ public class LessonAttemptServiceImpl implements LessonAttemptService {
                 sourceType = UserExpLog.SourceType.REVIEW_LESSON;
             }
             case JUMP_TEST -> {
-                passed = req.getHeartsRemaining() != null && req.getHeartsRemaining() > 0;
+                // Tieu chuan 3 tim: chi dau khi:
+                // 1. Con it nhat 1 tim (heartsRemaining > 0). Neu het tim (<= 0) -> TRUOT ngay.
+                // 2. So loi sai khong vuot qua nguong cho phep (mac dinh 2 loi cho 3 tim).
+                //    Doi chieu ca gradedMistakes tu DB lan totalMistakes client gui.
+                // 3. Bat buoc phai hoan thanh du 100% so cau hoi cua bai thi (khong bo do/chet giua chung).
+                int maxMistakes = resolveJumpTestMaxMistakes(lesson);
+                int effectiveMistakes = gradedAnswers.isEmpty()
+                        ? (clientMistakes != null ? clientMistakes : 0)
+                        : Math.max(gradedMistakes, clientMistakes != null ? clientMistakes : 0);
+
+                int attempted = (req.getTotalCorrect() != null ? req.getTotalCorrect() : 0)
+                        + (req.getTotalMistakes() != null ? req.getTotalMistakes() : 0);
+                int sessionQuestions = req.getTotalQuestions() != null && req.getTotalQuestions() > 0
+                        ? req.getTotalQuestions()
+                        : resolveQuestionsPerSession(lesson);
+
+                boolean hasHearts = req.getHeartsRemaining() == null || req.getHeartsRemaining() > 0;
+                boolean completedAllQuestions = attempted >= sessionQuestions;
+                boolean withinMistakeLimit = effectiveMistakes <= maxMistakes;
+
+                passed = hasHearts && completedAllQuestions && withinMistakeLimit;
                 expGained = passed ? resolveJumpTestExp(lesson) : 0;
                 coinsGained = passed ? JUMP_TEST_COIN_REWARD : 0;
                 sourceType = UserExpLog.SourceType.JUMP_TEST;
             }
             default -> throw new IllegalArgumentException(
-                    "Loai bai hoc khong ho tro: " + lesson.getLessonType());
+                    "Loại bài học không hỗ trợ: " + lesson.getLessonType());
         }
 
         // Replay: giam EXP + coin (vd chi con 30% so voi lan dau), tranh farm bang cach lam lai lien tuc.
@@ -363,9 +387,10 @@ public class LessonAttemptServiceImpl implements LessonAttemptService {
             }
             upsertProgress(userId, lesson, ProgressStatus.COMPLETED, starsToPersist);
 
-            // JUMP_TEST pass -> danh dau tat ca NORMAL/TOPIC_REVIEW trong topic la COMPLETED.
+            // JUMP_TEST pass -> danh dau tat ca NORMAL/TOPIC_REVIEW cua TOPIC NAY VA MOI TOPIC
+            // TRUOC DO la COMPLETED (khong chi rieng topic nay) -- xem markAllTopicsUpToCompleted.
             if (lesson.getLessonType() == LessonType.JUMP_TEST) {
-                markAllInTopicCompleted(userId, lesson.getTopicId());
+                markAllTopicsUpToCompleted(userId, lesson.getTopicId());
                 isTopicCompleted = true;
             } else {
                 isTopicCompleted = isAllLessonsInTopicCompleted(userId, lesson.getTopicId());
@@ -529,7 +554,7 @@ public class LessonAttemptServiceImpl implements LessonAttemptService {
                 .coinsEarned(passed ? coinsGained : 0)
                 .starsEarned(starsEarned)
                 .isTopicCompleted(isTopicCompleted)
-                .message(passed ? "Tuyet voi, ban da hoan thanh bai hoc!" : "Hay tiep tuc co gang!")
+                .message(passed ? "Tuyệt vời, bạn đã hoàn thành bài học!" : "Hãy tiếp tục cố gắng!")
                 .isPromoted(promoted)
                 .newRankName(newRankName)
                 .currentEnergy(user.getCurrentEnergy())
@@ -708,6 +733,15 @@ public class LessonAttemptServiceImpl implements LessonAttemptService {
             return config.get("expReward").asInt();
         }
         return 30;
+    }
+
+    /** So loi toi da cho phep de dau 1 JUMP_TEST. Admin co the override qua configJson.maxMistakes. */
+    private int resolveJumpTestMaxMistakes(Lesson lesson) {
+        JsonNode config = lesson.getConfigJson();
+        if (config != null && config.has("maxMistakes")) {
+            return config.get("maxMistakes").asInt();
+        }
+        return JUMP_TEST_MAX_MISTAKES;
     }
 
     /**
@@ -901,14 +935,94 @@ public class LessonAttemptServiceImpl implements LessonAttemptService {
     }
 
     /**
-     * JUMP_TEST pass -> danh dau tat ca bai NORMAL/TOPIC_REVIEW trong topic la COMPLETED.
+     * Danh dau tat ca bai NORMAL/TOPIC_REVIEW cua TOPIC NAY VA MOI TOPIC TRUOC DO (theo
+     * {@code order_index}) la COMPLETED. Dung khi JUMP_TEST dau hoac khi Placement Test chot
+     * duoc diem dung.
+     *
+     * <p><b>Quan trong:</b> truoc day ham nay chi lay {@code findAllByTopicIdOrdered(topicId)} --
+     * DUY NHAT topic vua thi -- nen mot user hoan toan moi co the thi thang Jump Test cua topic 5
+     * ma khong dung toi topic 1-4, va neu dau thi chi topic 5 duoc COMPLETED con 1-4 van LOCKED
+     * ("nhay lo cho"). Sua bang cach tai su dung {@link #resolveTopicScopeUpTo(Long)} (da co san
+     * cho TOPIC_REVIEW) de lap qua CA KHOANG topic tu dau toi day, dam bao khong bao gio co nhanh
+     * nao danh dau 1 topic COMPLETED ma bo qua topic dung truoc no.</p>
      */
-    private void markAllInTopicCompleted(Long userId, Long topicId) {
-        List<Lesson> siblings = lessonRepository.findAllByTopicIdOrdered(topicId);
-        for (Lesson sibling : siblings) {
-            if (sibling.getLessonType() == LessonType.JUMP_TEST) continue;
-            upsertProgress(userId, sibling, ProgressStatus.COMPLETED, null);
+    private void markAllTopicsUpToCompleted(Long userId, Long topicId) {
+        List<Long> skippedLessonIds = new ArrayList<>();
+        for (Long scopedTopicId : resolveTopicScopeUpTo(topicId)) {
+            List<Lesson> siblings = lessonRepository.findAllByTopicIdOrdered(scopedTopicId);
+            for (Lesson sibling : siblings) {
+                if (sibling.getLessonType() == LessonType.JUMP_TEST) continue;
+                upsertProgress(userId, sibling, ProgressStatus.COMPLETED, null);
+                skippedLessonIds.add(sibling.getId());
+            }
         }
+
+        // Nhay coc qua JUMP_TEST/placement khong tao gradedAnswers cho tung cau
+        // cua cac bai NORMAL/TOPIC_REVIEW vua bi danh dau COMPLETED o tren --
+        // nguoi hoc chua he tra loi chung. Khong co buoc nay thi tu vung trong
+        // do khong bao gio vao lich SM-2, du roadmap coi nhu "da hoc" (xem
+        // VocabularyServiceImpl.backfillSkippedProgress).
+        if (!skippedLessonIds.isEmpty()) {
+            List<Long> questionIds = questionRepository.findAllByLessonIdInOrderByIdAsc(skippedLessonIds)
+                    .stream()
+                    .map(LessonQuestion::getId)
+                    .toList();
+            vocabularyService.backfillSkippedProgress(userId, questionIds);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Uy thac phan "cascade khong lo cho" cho {@link #markAllTopicsUpToCompleted(Long, Long)} --
+     * cung 1 duong ma JUMP_TEST dang dung, dam bao 2 tinh nang khong the lech nhau.</p>
+     */
+    @Override
+    @Transactional
+    public com.example.nihongo_app.dto.response.PlacementCompletionResult completePlacement(
+            Long userId, Long cutoffTopicId) {
+        if (cutoffTopicId == null) {
+            return com.example.nihongo_app.dto.response.PlacementCompletionResult.builder()
+                    .topicId(null)
+                    .topicTitle(null)
+                    .expEarned(0)
+                    .coinsEarned(0)
+                    .build();
+        }
+
+        Topic topic = topicRepository.findByIdAndDeletedAtIsNull(cutoffTopicId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Không tìm thấy chủ đề với id=" + cutoffTopicId));
+
+        markAllTopicsUpToCompleted(userId, cutoffTopicId);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Khong tim thay user voi id=" + userId));
+
+        user.setExp((user.getExp() == null ? 0 : user.getExp()) + PLACEMENT_EXP_REWARD);
+        user.setCoins(Objects.requireNonNullElse(user.getCoins(), 0) + PLACEMENT_COIN_REWARD);
+        userRepository.save(user);
+
+        expLogRepository.save(UserExpLog.builder()
+                .userId(userId)
+                .expGained(PLACEMENT_EXP_REWARD)
+                .sourceType(UserExpLog.SourceType.JUMP_TEST)
+                .referenceId(cutoffTopicId)
+                .build());
+        coinTransactionRepository.save(CoinTransaction.builder()
+                .userId(userId)
+                .amount(PLACEMENT_COIN_REWARD)
+                .transactionType(TransactionType.EARN_LESSON)
+                .referenceId(cutoffTopicId)
+                .build());
+
+        return com.example.nihongo_app.dto.response.PlacementCompletionResult.builder()
+                .topicId(topic.getId())
+                .topicTitle(topic.getTitle())
+                .expEarned(PLACEMENT_EXP_REWARD)
+                .coinsEarned(PLACEMENT_COIN_REWARD)
+                .build();
     }
 
     /**
